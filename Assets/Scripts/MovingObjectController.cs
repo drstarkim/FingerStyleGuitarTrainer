@@ -24,11 +24,21 @@ public class MovingObjectController : MonoBehaviour
         "f13s3", "f13s3", "f15s3", "f13s2", "f14s2", "f13s2", "f13s3", "f15s3",
         "f13s3", "f13s3", "f15s3", "f13s2", "f14s2", "f13s2", "f13s3", "f13s4",
         "m", "m", "m", "m",
-        "f13s3", "f13s3", "f15s3", "f13s2", "f14s2", "f13s2", "mute s3", "f13s3", "mute s3", "mute s3", "f15s3",
-        "f15s3", "f15s3", "f17s3", "ms4", "ms4", "f13s4", "f15s4", "mute s3", "f13s3", "ms4", "f15s4", "f13s3", "f15s4", "f13s4",
+        "f13s3", "f13s3", "f15s3", "f13s2", "f14s2", "f13s2", "ms3", "f13s3", "ms3", "ms3", "f15s3",
+        "f15s3", "f15s3", "f17s3", "ms4", "ms4", "f13s4", "f15s4", "ms3", "f13s3", "ms4", "f15s4", "f13s3", "f15s4", "f13s4",
         "f13s3", "f13s3", "f15s3", "f13s2", "f14s2", "f13s2", "ms3", "f13s3", "ms3", "ms3", "f13s4", "f15s4", "f15s4", "f13s4", "f16s2", "f16s2", "f14s2", "f14s2",
         "f13s2", "f11s2", "f9s2", "f9s2", "f8s2", "f4s2"
     };
+
+
+    // Timing array in seconds between each target
+    private float[] targetTiming = new float[]
+    {
+        1, 2, 1, 1, 1, 1, 2, 2, 1, 2, 1, 1, 1, 1, 2, 2, 1, 1, 1, 1, 1, 2, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 
+        1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 4, 4, 4, 4, 4
+    };
+
     private int currentTargetIndex = 0;
 
     void Start()
@@ -54,14 +64,23 @@ public class MovingObjectController : MonoBehaviour
     {
         frequencyRanges = new (float, float)[allObjects.Length];
 
-        // Randomly assign frequency ranges for each object
-        for (int i = 0; i < allObjects.Length; i++)
-        {
-            float minFreq = Random.Range(100f, 1000f); // Example range: 100 Hz to 1000 Hz
-            float maxFreq = minFreq + Random.Range(50f, 200f); // Ensure range is at least 50 Hz wide
-            frequencyRanges[i] = (minFreq, maxFreq);
+        // Specific frequency ranges for each target
+        frequencyRanges[0] = (310f, 312f); // f4s2
+        frequencyRanges[1] = (390f, 393f); // f8s2
+        frequencyRanges[2] = (414f, 417f); // f9s2
+        frequencyRanges[3] = (522f, 525f); // f13s2
+        frequencyRanges[4] = (414f, 417f); // f13s3
+        frequencyRanges[5] = (310f, 312f); // f13s4
+        frequencyRanges[6] = (553f, 556f); // f14s2
+        frequencyRanges[7] = (465f, 468f); // f15s3
+        frequencyRanges[8] = (348f, 351f); // f15s4
+        frequencyRanges[9] = (621f, 624f); // f16s2
+        frequencyRanges[10] = (522f, 525f); // f17s3
 
-            Debug.Log($"{allObjects[i].name} -> Frequency Range: {minFreq} Hz to {maxFreq} Hz");
+        // For m, ms3, and ms4, allow any frequency range
+        for (int i = 11; i < frequencyRanges.Length; i++)
+        {
+            frequencyRanges[i] = (0f, float.MaxValue); // Allow any frequency range for these targets
         }
 
         // Ensure frequencyRanges length matches targetSequence length
@@ -76,6 +95,7 @@ public class MovingObjectController : MonoBehaviour
             }
         }
     }
+
 
     void StartMicrophone()
     {
@@ -114,7 +134,8 @@ public class MovingObjectController : MonoBehaviour
                 currentTargetIndex++; // Move to the next target
             }
 
-            float waitTime = Random.Range(1f, 3f);
+            // Use the specific timing for this target
+            float waitTime = targetTiming[currentTargetIndex];
             yield return new WaitForSeconds(waitTime);
         }
     }
@@ -145,41 +166,43 @@ public class MovingObjectController : MonoBehaviour
 
         statusText.text = $"Cue moving to {target.name} (Frequency Range: {minFreq} Hz - {maxFreq} Hz)";
 
+        // Move the cue to the target object
         while (Vector3.Distance(obj.transform.position, target.transform.position) > 0.1f)
         {
             obj.transform.position = Vector3.MoveTowards(obj.transform.position, target.transform.position, speed * Time.deltaTime);
             yield return null;
         }
 
+        // Detect frequency and compare with range
         float detectedFrequency = DetectFrequencyFromMic();
         frequencyText.text = $"Detected Frequency: {detectedFrequency} Hz";
 
-        CompareFrequencyWithRange(detectedFrequency, targetIndex);
-        Destroy(obj);
+        CompareFrequencyWithRange(detectedFrequency, target); // Use the target directly
+        Destroy(obj); // Destroy cue object after reaching the target
     }
 
-    void CompareFrequencyWithRange(float detectedFrequency, int targetIndex)
+    void CompareFrequencyWithRange(float detectedFrequency, GameObject target)
     {
-        var (minFreq, maxFreq) = frequencyRanges[targetIndex];
+        var (minFreq, maxFreq) = frequencyRanges[currentTargetIndex]; // Use currentTargetIndex for range
 
         if (detectedFrequency >= minFreq && detectedFrequency <= maxFreq)
         {
             statusText.text = $"Success! {detectedFrequency} Hz is within the range ({minFreq} - {maxFreq} Hz).";
-            allObjects[targetIndex].GetComponent<Renderer>().material.color = Color.green;
+            target.GetComponent<Renderer>().material.color = Color.green; // Apply color change to the target
         }
         else
         {
             statusText.text = $"Failed! {detectedFrequency} Hz is outside the range ({minFreq} - {maxFreq} Hz).";
-            allObjects[targetIndex].GetComponent<Renderer>().material.color = Color.red;
+            target.GetComponent<Renderer>().material.color = Color.red; // Apply color change to the target
         }
 
-        StartCoroutine(RevertColorAfterDelay(allObjects[targetIndex]));
+        StartCoroutine(RevertColorAfterDelay(target)); // Pass target to revert color
     }
 
     IEnumerator RevertColorAfterDelay(GameObject target)
     {
-        yield return new WaitForSeconds(1f);
-        target.GetComponent<Renderer>().material.color = Color.white;
+        yield return new WaitForSeconds(1f); // Wait for 1 second before reverting color
+        target.GetComponent<Renderer>().material.color = Color.white; // Revert color back to white
     }
 
     void SetObjectsTransparency(float transparency)
