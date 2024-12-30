@@ -35,7 +35,7 @@ public class MovingObjectController : MonoBehaviour
     private float[] targetTiming = new float[]
     {
         1, 2, 1, 1, 1, 1, 2, 2, 1, 2, 1, 1, 1, 1, 2, 2, 1, 1, 1, 1, 1, 2, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 
         1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 4, 4, 4, 4, 4
     };
 
@@ -96,7 +96,6 @@ public class MovingObjectController : MonoBehaviour
         }
     }
 
-
     void StartMicrophone()
     {
         if (Microphone.devices.Length > 0)
@@ -126,6 +125,29 @@ public class MovingObjectController : MonoBehaviour
             if (target != null)
             {
                 GameObject newCue = Instantiate(cuePrefab, originalPosition, Quaternion.identity);
+
+                // Change cue's color to match the target's color
+                Renderer targetRenderer = target.GetComponent<Renderer>();
+                Renderer cueRenderer = newCue.GetComponent<Renderer>();
+                if (targetRenderer != null && cueRenderer != null)
+                {
+                    cueRenderer.material.color = targetRenderer.material.color;
+                }
+
+                // Change cue's shape to match the target's shape
+                MeshFilter targetMeshFilter = target.GetComponent<MeshFilter>();
+                MeshFilter cueMeshFilter = newCue.GetComponent<MeshFilter>();
+                if (targetMeshFilter != null && cueMeshFilter != null)
+                {
+                    cueMeshFilter.mesh = targetMeshFilter.mesh;
+                }
+
+                // Change cue's size to match the target's size
+                newCue.transform.localScale = target.transform.localScale;
+
+                // Change cue's orientation to match the target's orientation
+                newCue.transform.rotation = target.transform.rotation;
+
                 StartCoroutine(MoveToTarget(newCue, target, currentTargetIndex));
 
                 // Make all objects transparent
@@ -139,6 +161,8 @@ public class MovingObjectController : MonoBehaviour
             yield return new WaitForSeconds(waitTime);
         }
     }
+
+
 
     GameObject GetTargetByName(string targetName)
     {
@@ -175,37 +199,49 @@ public class MovingObjectController : MonoBehaviour
 
         // Detect frequency and compare with range
         float detectedFrequency = DetectFrequencyFromMic();
-        frequencyText.text = $"Detected Frequency: {detectedFrequency} Hz";
-
-        CompareFrequencyWithRange(detectedFrequency, target); // Use the target directly
-        Destroy(obj); // Destroy cue object after reaching the target
-    }
-
-    void CompareFrequencyWithRange(float detectedFrequency, GameObject target)
-    {
-        var (minFreq, maxFreq) = frequencyRanges[currentTargetIndex]; // Use currentTargetIndex for range
 
         if (detectedFrequency >= minFreq && detectedFrequency <= maxFreq)
         {
-            statusText.text = $"Success! {detectedFrequency} Hz is within the range ({minFreq} - {maxFreq} Hz).";
-            target.GetComponent<Renderer>().material.color = Color.green; // Apply color change to the target
+            frequencyText.text = $"Frequency Detected: {detectedFrequency:F1} Hz (Valid)";
+            Destroy(obj);
         }
         else
         {
-            statusText.text = $"Failed! {detectedFrequency} Hz is outside the range ({minFreq} - {maxFreq} Hz).";
-            target.GetComponent<Renderer>().material.color = Color.red; // Apply color change to the target
+            frequencyText.text = $"Frequency Detected: {detectedFrequency:F1} Hz (Invalid)";
         }
 
-        StartCoroutine(RevertColorAfterDelay(target)); // Pass target to revert color
+        // Restore objects' transparency to normal
+        SetObjectsTransparency(1f); // 1f means fully opaque
     }
 
-    IEnumerator RevertColorAfterDelay(GameObject target)
+    float DetectFrequencyFromMic()
     {
-        yield return new WaitForSeconds(1f); // Wait for 1 second before reverting color
-        target.GetComponent<Renderer>().material.color = Color.white; // Revert color back to white
+        if (micClip == null || samples == null)
+        {
+            Debug.LogError("Microphone or samples not initialized.");
+            return 0f;
+        }
+
+        micClip.GetData(samples, 0);
+
+        float maxMagnitude = 0f;
+        int maxIndex = 0;
+
+        for (int i = 0; i < samples.Length; i++)
+        {
+            float magnitude = Mathf.Abs(samples[i]);
+            if (magnitude > maxMagnitude)
+            {
+                maxMagnitude = magnitude;
+                maxIndex = i;
+            }
+        }
+
+        float frequency = maxIndex * sampleRate / samples.Length;
+        return frequency;
     }
 
-    void SetObjectsTransparency(float transparency)
+    void SetObjectsTransparency(float alpha)
     {
         foreach (GameObject obj in allObjects)
         {
@@ -213,32 +249,9 @@ public class MovingObjectController : MonoBehaviour
             if (renderer != null)
             {
                 Color color = renderer.material.color;
-                color.a = transparency; // Set alpha to make it transparent
+                color.a = alpha;
                 renderer.material.color = color;
             }
         }
-    }
-
-    float DetectFrequencyFromMic()
-    {
-        int position = Microphone.GetPosition(null);
-        if (position < samples.Length) return 0f;
-
-        micClip.GetData(samples, position - samples.Length);
-
-        float highestFreq = 0f;
-        float maxAmplitude = 0f;
-
-        for (int i = 0; i < samples.Length; i++)
-        {
-            float amplitude = Mathf.Abs(samples[i]);
-            if (amplitude > maxAmplitude)
-            {
-                maxAmplitude = amplitude;
-                highestFreq = i * (sampleRate / 2) / (samples.Length / 2);
-            }
-        }
-
-        return highestFreq;
     }
 }
