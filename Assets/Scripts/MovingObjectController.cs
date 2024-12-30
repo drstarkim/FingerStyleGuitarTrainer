@@ -2,7 +2,6 @@ using UnityEngine;
 using TMPro;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 
 public class MovingObjectController : MonoBehaviour
 {
@@ -30,16 +29,17 @@ public class MovingObjectController : MonoBehaviour
         "f13s2", "f11s2", "f9s2", "f9s2", "f8s2", "f4s2"
     };
 
-
     // Timing array in seconds between each target
     private float[] targetTiming = new float[]
     {
         1, 2, 1, 1, 1, 1, 2, 2, 1, 2, 1, 1, 1, 1, 2, 2, 1, 1, 1, 1, 1, 2, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 
         1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 4, 4, 4, 4, 4
     };
 
     private int currentTargetIndex = 0;
+
+    private Dictionary<GameObject, Color> originalColors = new Dictionary<GameObject, Color>(); // To store original colors of targets
 
     void Start()
     {
@@ -64,34 +64,52 @@ public class MovingObjectController : MonoBehaviour
     {
         frequencyRanges = new (float, float)[allObjects.Length];
 
-        // Specific frequency ranges for each target
-        frequencyRanges[0] = (310f, 312f); // f4s2
-        frequencyRanges[1] = (390f, 393f); // f8s2
-        frequencyRanges[2] = (414f, 417f); // f9s2
-        frequencyRanges[3] = (522f, 525f); // f13s2
-        frequencyRanges[4] = (414f, 417f); // f13s3
-        frequencyRanges[5] = (310f, 312f); // f13s4
-        frequencyRanges[6] = (553f, 556f); // f14s2
-        frequencyRanges[7] = (465f, 468f); // f15s3
-        frequencyRanges[8] = (348f, 351f); // f15s4
-        frequencyRanges[9] = (621f, 624f); // f16s2
-        frequencyRanges[10] = (522f, 525f); // f17s3
-
-        // For m, ms3, and ms4, allow any frequency range
-        for (int i = 11; i < frequencyRanges.Length; i++)
+        // Assign frequency ranges based on target names
+        for (int i = 0; i < allObjects.Length; i++)
         {
-            frequencyRanges[i] = (0f, float.MaxValue); // Allow any frequency range for these targets
-        }
+            string targetName = allObjects[i].name;
 
-        // Ensure frequencyRanges length matches targetSequence length
-        if (frequencyRanges.Length < targetSequence.Count)
-        {
-            Debug.LogWarning("Frequency ranges are fewer than target sequence; reusing last range.");
-            (float minFreq, float maxFreq) lastRange = frequencyRanges[frequencyRanges.Length - 1];
-
-            for (int i = frequencyRanges.Length; i < targetSequence.Count; i++)
+            switch (targetName)
             {
-                frequencyRanges = frequencyRanges.Concat(new[] { lastRange }).ToArray();
+                case "f4s2":
+                    frequencyRanges[i] = (310f, 312f);
+                    break;
+                case "f8s2":
+                    frequencyRanges[i] = (390f, 393f);
+                    break;
+                case "f9s2":
+                    frequencyRanges[i] = (414f, 417f);
+                    break;
+                case "f11s2":
+                    frequencyRanges[i] = (465f, 468f);
+                    break;
+                case "f13s2":
+                    frequencyRanges[i] = (522f, 525f);
+                    break;
+                case "f13s3":
+                    frequencyRanges[i] = (414f, 417f);
+                    break;
+                case "f13s4":
+                    frequencyRanges[i] = (310f, 312f);
+                    break;
+                case "f14s2":
+                    frequencyRanges[i] = (553f, 556f);
+                    break;
+                case "f15s3":
+                    frequencyRanges[i] = (465f, 468f);
+                    break;
+                case "f15s4":
+                    frequencyRanges[i] = (348f, 351f);
+                    break;
+                case "f16s2":
+                    frequencyRanges[i] = (621f, 624f);
+                    break;
+                case "f17s3":
+                    frequencyRanges[i] = (522f, 525f);
+                    break;
+                default:
+                    frequencyRanges[i] = (0f, float.MaxValue); // Allow any frequency for unspecified names
+                    break;
             }
         }
     }
@@ -124,30 +142,15 @@ public class MovingObjectController : MonoBehaviour
 
             if (target != null)
             {
+                // Store the original color of the target before modifying it
+                if (!originalColors.ContainsKey(target))
+                {
+                    originalColors[target] = target.GetComponent<Renderer>().material.color;
+                }
+
                 GameObject newCue = Instantiate(cuePrefab, originalPosition, Quaternion.identity);
-
-                // Change cue's color to match the target's color
-                Renderer targetRenderer = target.GetComponent<Renderer>();
-                Renderer cueRenderer = newCue.GetComponent<Renderer>();
-                if (targetRenderer != null && cueRenderer != null)
-                {
-                    cueRenderer.material.color = targetRenderer.material.color;
-                }
-
-                // Change cue's shape to match the target's shape
-                MeshFilter targetMeshFilter = target.GetComponent<MeshFilter>();
-                MeshFilter cueMeshFilter = newCue.GetComponent<MeshFilter>();
-                if (targetMeshFilter != null && cueMeshFilter != null)
-                {
-                    cueMeshFilter.mesh = targetMeshFilter.mesh;
-                }
-
-                // Change cue's size to match the target's size
-                newCue.transform.localScale = target.transform.localScale;
-
-                // Change cue's orientation to match the target's orientation
-                newCue.transform.rotation = target.transform.rotation;
-
+                // Change the cue's shape and color to match the target
+                ChangeCueAppearance(newCue, target);
                 StartCoroutine(MoveToTarget(newCue, target, currentTargetIndex));
 
                 // Make all objects transparent
@@ -161,8 +164,6 @@ public class MovingObjectController : MonoBehaviour
             yield return new WaitForSeconds(waitTime);
         }
     }
-
-
 
     GameObject GetTargetByName(string targetName)
     {
@@ -179,6 +180,7 @@ public class MovingObjectController : MonoBehaviour
 
     IEnumerator MoveToTarget(GameObject obj, GameObject target, int targetIndex)
     {
+        // Ensure the index is within bounds of frequencyRanges array
         if (targetIndex >= frequencyRanges.Length)
         {
             Debug.LogError("Target index out of bounds of frequencyRanges array.");
@@ -186,9 +188,10 @@ public class MovingObjectController : MonoBehaviour
         }
 
         float speed = 5f;
-        var (minFreq, maxFreq) = frequencyRanges[targetIndex];
+        var (minFreq, maxFreq) = frequencyRanges[targetIndex]; // Get the frequency range for the current target
 
-        statusText.text = $"Cue moving to {target.name} (Frequency Range: {minFreq} Hz - {maxFreq} Hz)";
+        // Update status text with the next cue's frequency range (display the cue, not the result)
+        // statusText.text = $"Play {target.name}";
 
         // Move the cue to the target object
         while (Vector3.Distance(obj.transform.position, target.transform.position) > 0.1f)
@@ -199,47 +202,53 @@ public class MovingObjectController : MonoBehaviour
 
         // Detect frequency and compare with range
         float detectedFrequency = DetectFrequencyFromMic();
+        // frequencyText.text = $"Detected Frequency: {detectedFrequency} Hz";
 
+        // Update note text based on the comparison result
+        CompareFrequencyWithRange(detectedFrequency, target, minFreq, maxFreq);
+        
+        // Destroy the cue object after reaching the target
+        Destroy(obj); 
+    }
+
+    void CompareFrequencyWithRange(float detectedFrequency, GameObject target, float minFreq, float maxFreq)
+    {
+        // Check if detected frequency is within the target frequency range
         if (detectedFrequency >= minFreq && detectedFrequency <= maxFreq)
         {
-            frequencyText.text = $"Frequency Detected: {detectedFrequency:F1} Hz (Valid)";
-            Destroy(obj);
+            // If successful, display the success message in noteText
+            frequencyText.text = $"Correct! We detected {detectedFrequency} Hz which is within the range ({minFreq} - {maxFreq} Hz).";
+            target.GetComponent<Renderer>().material.color = Color.green; // Change target color to green
         }
         else
         {
-            frequencyText.text = $"Frequency Detected: {detectedFrequency:F1} Hz (Invalid)";
+            // If failure, display the failure message in noteText
+            frequencyText.text = $"Wrong! We detected {detectedFrequency} Hz which is outside the range ({minFreq} - {maxFreq} Hz).";
+            target.GetComponent<Renderer>().material.color = Color.red; // Change target color to red
         }
 
-        // Restore objects' transparency to normal
-        SetObjectsTransparency(1f); // 1f means fully opaque
+        // Revert the target color back to its original color after a short delay
+        StartCoroutine(RevertTargetColor(target));
     }
 
-    float DetectFrequencyFromMic()
+    IEnumerator RevertTargetColor(GameObject target)
     {
-        if (micClip == null || samples == null)
+        // Wait for 1 second before reverting the color
+        yield return new WaitForSeconds(1f);
+        
+        // Check if the target has an original color stored in the dictionary
+        if (originalColors.ContainsKey(target))
         {
-            Debug.LogError("Microphone or samples not initialized.");
-            return 0f;
+            // Revert color to its original (stored color)
+            target.GetComponent<Renderer>().material.color = originalColors[target];
         }
-
-        micClip.GetData(samples, 0);
-
-        float maxMagnitude = 0f;
-        int maxIndex = 0;
-
-        for (int i = 0; i < samples.Length; i++)
+        else
         {
-            float magnitude = Mathf.Abs(samples[i]);
-            if (magnitude > maxMagnitude)
-            {
-                maxMagnitude = magnitude;
-                maxIndex = i;
-            }
+            // If no original color is found, revert to a default color (e.g., white)
+            target.GetComponent<Renderer>().material.color = Color.white;
         }
-
-        float frequency = maxIndex * sampleRate / samples.Length;
-        return frequency;
     }
+
 
     void SetObjectsTransparency(float alpha)
     {
@@ -253,5 +262,39 @@ public class MovingObjectController : MonoBehaviour
                 renderer.material.color = color;
             }
         }
+    }
+
+    void ChangeCueAppearance(GameObject cue, GameObject target)
+    {
+        Renderer targetRenderer = target.GetComponent<Renderer>();
+        if (targetRenderer != null)
+        {
+            // Change color
+            cue.GetComponent<Renderer>().material.color = targetRenderer.material.color;
+            
+            // You can change shape here if needed (e.g., by adjusting the scale or model of the cue)
+        }
+    }
+
+    float DetectFrequencyFromMic()
+    {
+        micClip.GetData(samples, 0);
+
+        float maxFrequency = 0;
+        float maxAmplitude = 0;
+
+        for (int i = 0; i < samples.Length / 2; i++)
+        {
+            float frequency = i * (sampleRate / 2) / (samples.Length / 2);
+            float amplitude = Mathf.Abs(samples[i]);
+
+            if (amplitude > maxAmplitude)
+            {
+                maxAmplitude = amplitude;
+                maxFrequency = frequency;
+            }
+        }
+
+        return maxFrequency;
     }
 }
